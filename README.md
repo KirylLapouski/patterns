@@ -1,0 +1,1 @@
+## Repository with patterns which can be reused across projects
