@@ -1,0 +1,198 @@
+import type { ElementType } from "react";
+import { Link as RouterLink } from "react-router-dom";
+
+type BreadcrumbsProps = {
+  items: {
+    text: string;
+    url?: string;
+    linkAs?: ElementType;
+    linkProps?: { [key: string]: string };
+  }[];
+};
+
+type RoutingTreeNode = {
+  title: string;
+  children?: { [key: string]: RoutingTreeNode };
+};
+
+/**
+ * Хранит дерево маршрутов (RoutingTreeNode), сопоставляющее URL-сегменты с заголовками для генерации breadcrumbs.
+ * Каждый узел дерева представляет сегмент пути URL, а его `title` — отображаемое имя в breadcrumbs.
+ * Если `title` пустая строка (`""`), сегмент не отображается в breadcrumbs.
+ *
+ * @type {RoutingTreeNode}
+ * @property title - Отображаемый текст для breadcrumbs. Если пустая строка, сегмент скрыт.
+ * @property children - Дочерние узлы, ключи — сегменты(https://developer.mozilla.org/en-US/docs/Web/URI/Reference/Path) URL-пути.
+ *   - Сегменты могут быть буквальными (например, `"hello"`) или параметрическими (например, `":someone"`).
+ *
+ * @example
+ * // Дерево для URL-путей: /hello, /hello/:someone, /hello/user1
+ * const routingTree = {
+ *   title: "",
+ *   children: {
+ *     hello: {
+ *       title: "Hello world",
+ *       children: {
+ *         [":someone"]: {
+ *           title: "Hello for user",
+ *         },
+ *         user1: {
+ *           title: "Hello user1",
+ *         }
+ *       }
+ *     }
+ *   }
+ * };
+ *
+ * @example
+ * // createBreadCrumbs("/hello/user1") →
+ * [
+ *   {
+ *     "linkAs": {},
+ *     "text": "Hello world",
+ *     "linkProps": {
+ *       "to": "/hello"
+ *     }
+ *   },
+ *   {
+ *     "linkAs": {},
+ *     "text": "Hello user1",
+ *     "linkProps": {
+ *       "to": "#"
+ *     }
+ *   }
+ * ]
+ *
+ * @example
+ * // createBreadCrumbs("/hello") →
+ * [
+ *   {
+ *     "linkAs": {},
+ *     "text": "Hello world",
+ *     "linkProps": {
+ *       "to": "#"
+ *     }
+ *   }
+ * ]
+ *
+ * @example
+ * // createBreadCrumbs("/hello/randomUser") →
+ * [
+ *   {
+ *     "linkAs": {},
+ *     "text": "Hello world",
+ *     "linkProps": {
+ *       "to": "/hello"
+ *     }
+ *   },
+ *   {
+ *     "linkAs": {},
+ *     "text": "Hello for user",
+ *     "linkProps": {
+ *       "to": "#"
+ *     }
+ *   }
+ * ]
+ *
+ */
+class RoutingTree {
+  tree: RoutingTreeNode = {
+    title: "",
+    children: {
+      metrics: {
+        // skip render this in bredcrumbs
+        title: "",
+        children: {
+          reports: {
+            title: "Готовые отчеты",
+            children: {
+              ":reportId": {
+                title: "Просмотр отчета",
+              },
+            },
+          },
+          configurator: {
+            title: "Конфигуратор отчетов",
+            children: {
+              ":reportTemplateId": {
+                title: "Настройка конфигурации отчета",
+              },
+            },
+          },
+          manual: {
+            title: "Ручные метрики",
+            children: {
+              ":metricName": {
+                title: "Информация о ручной метрике",
+                children: {
+                  ":metricValueId": {
+                    // skip render this in bredcrumbs
+                    title: "История метрики",
+                  },
+                },
+              },
+            },
+          },
+          composite: {
+            title: "Составные метрики",
+          },
+        },
+      },
+    },
+  };
+  createBreadCrumbs(currentPath: string): BreadcrumbsProps["items"] {
+    type ReduceResult = {
+      tree: RoutingTreeNode;
+      breadcrumbs: BreadcrumbsProps["items"];
+    };
+
+    const currentPathWithNoPrefixSlash = currentPath.startsWith("/")
+      ? currentPath.substring(1)
+      : currentPath;
+
+    const { breadcrumbs } = currentPathWithNoPrefixSlash.split("/").reduce(
+      (acc, v, i, all) => {
+        if (i > 0) {
+          acc.breadcrumbs[acc.breadcrumbs.length - 1] = {
+            url:
+              (acc.breadcrumbs[acc.breadcrumbs.length - 2]?.url ?? "") +
+              "/" +
+              all[i - 1],
+            text: acc.breadcrumbs[acc.breadcrumbs.length - 1].text,
+          };
+        }
+
+        const paramRoute = Object.entries(acc?.tree?.children ?? {}).find(
+          ([key]) => key.startsWith(":"),
+        );
+
+        const paramRouteValue = paramRoute?.[1];
+
+        const treeChildren = acc.tree.children?.[v] ?? paramRouteValue;
+
+        return {
+          tree: treeChildren,
+          breadcrumbs: acc.breadcrumbs.concat({
+            url: "#",
+            text: treeChildren?.title ?? "",
+          }),
+        } as ReduceResult;
+      },
+      { tree: this.tree, breadcrumbs: [] } as ReduceResult,
+    );
+
+    return breadcrumbs
+      .filter((v) => !!v.text)
+      .map((v) => {
+        // Преобразование в формат breadcrumbs с использованием RouterLink вместо ссылок
+        // https://github.com/AdmiralDS/web-app-vite-admiral/blob/main/src/examples/breadcrumbs/link.tsx
+        return {
+          linkAs: RouterLink,
+          text: v.text,
+          linkProps: { to: v.url as string },
+        };
+      });
+  }
+}
+
+export const routingTree = new RoutingTree();
